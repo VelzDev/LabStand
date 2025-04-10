@@ -1,6 +1,6 @@
 import sys
 import time
-from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QComboBox, QMessageBox
+from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QComboBox, QMessageBox, QLineEdit
 from PyQt6.QtCore import QTimer, Qt, QRect
 from PyQt6.QtGui import QPixmap, QMouseEvent, QMovie
 import pygame  # Импортируем pygame для работы с аудио
@@ -8,6 +8,11 @@ import pygame  # Импортируем pygame для работы с аудио
 class LabStand(QWidget):
     def __init__(self):
         super().__init__()
+
+        self.selected_analyzer = "СИГМА-03М"  # Устанавливаем значение по умолчанию для анализатора
+        self.selected_gas = "Метан"  # Устанавливаем значение по умолчанию для газа
+        self.gas_fill_speed = 0  # Скорость утечки газа в м³/с
+        self.gas_volume = 0  # Объем газа в м³
 
         self.initUI()
 
@@ -19,6 +24,7 @@ class LabStand(QWidget):
         self.setWindowTitle("Цифровой двойник лабораторного стенда")
         self.setGeometry(100, 100, 720, 400)  # Увеличиваем окно для двух картинок
         self.setFixedSize(600, 500)
+        
         # Основной вертикальный layout для интерфейса
         layout = QVBoxLayout()
 
@@ -38,8 +44,6 @@ class LabStand(QWidget):
 
         # Устанавливаем масштабированное изображение
         self.background_label.setPixmap(scaled_pixmap)
-        #self.background_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        #self.background_label.setFixedSize(300, 300)
         self.background_label.setGeometry(20, 350, 300, 300)  # 20 пикселей слева, 150 пикселей сверху
         # Добавляем изображения в горизонтальный layout
         image_layout.addWidget(self.image_label)
@@ -68,15 +72,26 @@ class LabStand(QWidget):
 
         # Выбор газоанализатора
         self.gas_selector = QComboBox()
-        self.gas_selector.addItems(["Анализатор A", "Анализатор B", "Анализатор C"])
+        self.gas_selector.addItems(["Сенсон-СВ-5022", "СИГМА-03М", "ЭКОЛАБ ПЛЮС"])
         self.gas_selector.hide()
         layout.addWidget(self.gas_selector)
 
         # Выбор газа
         self.gas_type_selector = QComboBox()
-        self.gas_type_selector.addItems(["Газ 1", "Газ 2", "Газ 3"])
+        self.gas_type_selector.addItems(["Метан", "Аммиак", "Угарный газ", "Хлор", "Сероводород"])
         self.gas_type_selector.hide()
         layout.addWidget(self.gas_type_selector)
+
+        # Поле для ввода скорости заполнения газа
+        self.gas_fill_speed_input = QLineEdit(self)
+        self.gas_fill_speed_input.setPlaceholderText("Скорость заполнения (м³/с)")
+        self.gas_fill_speed_input.textChanged.connect(self.update_gas_fill_speed)  # Подключаем обработчик
+        layout.addWidget(self.gas_fill_speed_input)
+
+        # Картинка газоанализатора
+        self.analyzer_image_label = QLabel(self)
+        self.analyzer_image_label.setGeometry(410, 160, 100, 100)  # Позиция картинки газоанализатора
+        self.update_analyzer_image()
 
         # Кнопка запуска
         self.start_button = QPushButton("Запустить проверку")
@@ -97,6 +112,13 @@ class LabStand(QWidget):
         self.alarm_timer.timeout.connect(self.toggle_alarm_color)
         self.alarm_state = False
 
+    def update_gas_fill_speed(self):
+        # Обновление скорости заполнения газа, если введено значение
+        try:
+            self.gas_fill_speed = float(self.gas_fill_speed_input.text())
+        except ValueError:
+            self.gas_fill_speed = 0  # Если введено некорректное значение, обнуляем скорость
+
     def mousePressEvent(self, event: QMouseEvent):
         if self.selection_area.contains(event.position().toPoint()):
             self.show_selection_dialog()
@@ -112,11 +134,11 @@ class LabStand(QWidget):
 
         # Анализатор
         analyzer_combobox = QComboBox(msg)
-        analyzer_combobox.addItems(["Анализатор A", "Анализатор B", "Анализатор C"])
+        analyzer_combobox.addItems(["Сенсон-СВ-5022", "СИГМА-03М", "ЭКОЛАБ ПЛЮС"])
 
         # Газ
         gas_combobox = QComboBox(msg)
-        gas_combobox.addItems(["Газ 1", "Газ 2", "Газ 3"])
+        gas_combobox.addItems(["Метан", "Аммиак", "Угарный газ", "Хлор", "Сероводород"])
 
         # Добавляем выпадающие списки в диалоговое окно
         msg.layout().addWidget(analyzer_combobox)
@@ -141,10 +163,27 @@ class LabStand(QWidget):
 
         self.start_button.show()
         print(f"Выбран: {analyzer}, Газ: {gas}")
+        self.update_analyzer_image()
+
+    def update_analyzer_image(self):
+        # Обновление картинки газоанализатора в зависимости от выбора
+        analyzer_images = {
+            "Сенсон-СВ-5022": "bin/images/senson.png",
+            "СИГМА-03М": "bin/images/sigma.png",
+            "ЭКОЛАБ ПЛЮС": "bin/images/ekolab.png"
+        }
+        analyzer_image = analyzer_images.get(self.selected_analyzer, "bin/images/default.png")
+        
+        # Масштабируем картинку с сохранением пропорций
+        pixmap = QPixmap(analyzer_image)
+        scaled_pixmap = pixmap.scaled(self.analyzer_image_label.size(), Qt.AspectRatioMode.KeepAspectRatio)
+        
+        # Устанавливаем масштабированное изображение
+        self.analyzer_image_label.setPixmap(scaled_pixmap)
 
     def start_gas_leak(self):
         if self.is_compatible(self.selected_analyzer, self.selected_gas):
-            self.gas_timer.start(1000)  # Каждую секунду увеличиваем уровень загазованности
+            self.gas_timer.start(1000)  # Каждую секунду увеличиваем объем газа
         else:
             print(f"Газ {self.selected_gas} не совместим с {self.selected_analyzer}. Уровень загазованности не увеличивается.")
 
@@ -152,23 +191,46 @@ class LabStand(QWidget):
         self.gas_timer.stop()
 
     def increase_gas(self):
-        self.gas_level += 1
-        print(f"Текущий уровень загазованности: {self.gas_level}")
+        # Увеличиваем объем газа на основе скорости утечки (м³/с)
+        self.gas_volume += self.gas_fill_speed
+        print(f"Текущий объем газа: {self.gas_volume:.3f} м³")
 
-        if self.gas_level > 5:  # Если достигли опасного уровня
+        # ПДК газов в миллиграммах
+        pdk_values_mg = {
+            "Метан": 7000,  # ПДК в мг/м³
+            "Аммиак": 20,
+            "Угарный газ": 20,
+            "Хлор": 1,
+            "Сероводород": 10
+        }
+
+        # Плотности газов при стандартных условиях (кг/м³)
+        densities = {
+            "Метан": 0.717,  # плотность метана (кг/м³)
+            "Аммиак": 0.73,
+            "Угарный газ": 1.25,
+            "Хлор": 3.2,
+            "Сероводород": 1.36
+        }
+
+        # Преобразуем объем газа в массу (кг)
+        gas_mass_kg = self.gas_volume * densities.get(self.selected_gas, 0)  # масса газа в кг
+        gas_mg = gas_mass_kg * 1000  # Переводим массу газа в мг
+
+        print(f"Концентрация газа: {gas_mg:.2f} мг")
+
+        if gas_mg > pdk_values_mg.get(self.selected_gas, float('inf')):  # Если масса газа превышает ПДК
             self.trigger_alarm()
+
 
     def is_compatible(self, analyzer, gas):
         # Проверка совместимости газоанализатора и газа
-        if analyzer == "Анализатор A" and gas == "Газ 3":
-            return False
-        elif analyzer == "Анализатор B" and gas == "Газ 2":
+        if analyzer == "Сенсон-СВ-5022" and gas != "Аммиак":
             return False
         return True
 
     def trigger_alarm(self):
         print("⚠️ СИГНАЛ ТРЕВОГИ! ОПАСНЫЙ УРОВЕНЬ ГАЗА! ⚠️")
-        #self.alarm_timer.start(500)  # Запускаем мигание
         self.alarm_sound.play()  # Включаем звук сирены
         self.siren_label.show()
 
@@ -182,10 +244,10 @@ class LabStand(QWidget):
     def reset_gas_timer(self):
         # Сбрасываем таймер загазованности при нажатии на вытяжной шкаф
         self.gas_timer.stop()
-        self.gas_level = 0
+        self.gas_volume = 0  # Сброс объема газа
         self.alarm_sound.stop()
         self.siren_label.hide()
-        print("Таймер сброшен. Загазованность сброшена.")
+        print("Таймер сброшен. Объем газа сброшен.")
         
 if __name__ == "__main__":
     app = QApplication(sys.argv)
